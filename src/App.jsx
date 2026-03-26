@@ -1,10 +1,11 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { useAuth } from './hooks/useAuth'
 import { LoginScreen } from './components/LoginScreen'
 import { Dashboard } from './components/Dashboard'
 
 export default function App() {
   const { user, loading, error, login, logout, isLoggedIn } = useAuth()
+  const [entered, setEntered] = useState(false)
 
   if (loading) {
     return (
@@ -26,9 +27,23 @@ export default function App() {
     )
   }
 
-  if (!isLoggedIn) {
-    return <LoginScreen onLogin={login} error={error} />
+  // Always show welcome screen unless user has explicitly entered the app
+  if (!entered || !isLoggedIn) {
+    return (
+      <LoginScreen
+        onLogin={() => {
+          if (isLoggedIn) {
+            setEntered(true)
+          } else {
+            login()
+          }
+        }}
+        isLoggedIn={isLoggedIn}
+        userName={user?.display_name}
+        error={error}
+      />
+    )
   }
 
-  return <Dashboard user={user} onLogout={logout} />
+  return <Dashboard user={user} onLogout={() => { logout(); setEntered(false) }} />
 }
