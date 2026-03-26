@@ -1,15 +1,15 @@
 :root {
-  --bg: #060608;
-  --bg-card: #0f0f13;
-  --bg-hover: #161620;
-  --accent: #b8ff3c;
-  --accent-dim: #7ab824;
-  --text-primary: #f0f0f0;
-  --text-secondary: #888899;
-  --text-muted: #444455;
-  --border: #1e1e2a;
-  --border-hover: #2e2e3e;
-  --danger: #ff4c4c;
+  --bg: #080809;
+  --bg-card: #111115;
+  --bg-hover: #18181f;
+  --accent: #8fbe2e;
+  --accent-dim: #5e9018;
+  --text-primary: #d8d8d8;
+  --text-secondary: #76767f;
+  --text-muted: #3e3e4a;
+  --border: #1c1c26;
+  --border-hover: #28283a;
+  --danger: #cc4040;
   --font-display: 'Syne', sans-serif;
   --font-mono: 'Space Mono', monospace;
   --radius: 6px;
