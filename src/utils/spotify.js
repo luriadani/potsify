@@ -18,54 +18,87 @@ async function apiFetch(path, options = {}) {
 
 export const MAX_POPULARITY = 50
 
-// tag:hipster is Spotify's built-in low-popularity filter — returns hundreds of obscure tracks
-// Combine with different search seeds for variety
+// Mix of strategies that reliably return tracks across regions:
+// - tag:hipster: Spotify's own obscurity filter
+// - genre:X: broad genre pools
+// - single letters: returns deep catalog cuts
+// - tag:hipster + year combos: era-specific obscure tracks
 const SEARCH_SEEDS = [
-  'tag:hipster',
-  'tag:hipster year:2000-2010',
-  'tag:hipster year:1990-2000',
-  'tag:hipster year:2010-2020',
-  'tag:hipster year:1980-1990',
-  'tag:hipster year:1970-1980',
-  'tag:hipster year:2020-2024',
-  'tag:hipster year:1960-1970',
+  { q: 'tag:hipster', label: 'hipster' },
+  { q: 'genre:ambient', label: 'ambient' },
+  { q: 'genre:folk', label: 'folk' },
+  { q: 'genre:jazz', label: 'jazz' },
+  { q: 'genre:classical', label: 'classical' },
+  { q: 'genre:blues', label: 'blues' },
+  { q: 'genre:indie', label: 'indie' },
+  { q: 'genre:soul', label: 'soul' },
+  { q: 'tag:hipster year:2000-2010', label: '00s hipster' },
+  { q: 'tag:hipster year:1990-2000', label: '90s hipster' },
+  { q: 'tag:hipster year:1980-1990', label: '80s hipster' },
+  { q: 'tag:hipster year:2010-2020', label: '10s hipster' },
 ]
 
-export async function fetchLowPopularityTracks(query, maxPop = MAX_POPULARITY, count = 15) {
-  const offset = Math.floor(Math.random() * 800)
+/**
+ * Core fetch — gets tracks from a query and includes ALL of them
+ * (null popularity = ultra-obscure, always included)
+ */
+async function fetchTracks(query, maxPop = MAX_POPULARITY, count = 15) {
+  const offset = Math.floor(Math.random() * 700)
   const params = new URLSearchParams({ q: query, type: 'track', limit: 50, offset })
   const data = await apiFetch(`/search?${params}`)
-  const tracks = data.tracks?.items || []
+  const items = data.tracks?.items || []
 
-  return tracks
-    .filter((t) => {
-      if (!t) return false
-      // null popularity = ultra-obscure, treat as 0 — always include
-      const pop = t.popularity ?? 0
-      return pop <= maxPop
+  return items
+    .filter(t => {
+      if (!t || !t.id) return false
+      // null popularity means Spotify hasn't scored it = ultra-obscure, always include
+      // numeric popularity must be <= maxPop
+      const pop = t.popularity
+      return pop === null || pop === undefined || pop <= maxPop
     })
     .sort((a, b) => (a.popularity ?? 0) - (b.popularity ?? 0))
     .slice(0, count)
     .map(normalizeTrack)
 }
 
-export async function fetchDiscoveryFeed(maxPop = MAX_POPULARITY, perQuery = 10) {
+export async function fetchDiscoveryFeed(maxPop = MAX_POPULARITY) {
+  // Pick 6 random seeds, run them in parallel
   const seeds = shuffleArray(SEARCH_SEEDS).slice(0, 6)
-  const results = await Promise.allSettled(seeds.map((q) => fetchLowPopularityTracks(q, maxPop, perQuery)))
-  const tracks = results.filter((r) => r.status === 'fulfilled').flatMap((r) => r.value)
+  const results = await Promise.allSettled(seeds.map(s => fetchTracks(s.q, maxPop, 12)))
+
+  const tracks = results
+    .filter(r => r.status === 'fulfilled')
+    .flatMap(r => r.value)
+
+  // Deduplicate
   const seen = new Set()
-  return tracks.filter((t) => { if (seen.has(t.id)) return false; seen.add(t.id); return true })
+  return tracks.filter(t => {
+    if (seen.has(t.id)) return false
+    seen.add(t.id)
+    return true
+  })
+}
+
+export async function fetchLowPopularityTracks(query, maxPop = MAX_POPULARITY, count = 15) {
+  return fetchTracks(query, maxPop, count)
 }
 
 export async function searchLowPopularityTracks(query, maxPop = MAX_POPULARITY) {
-  const params = new URLSearchParams({ q: query, type: 'track', limit: 50 })
-  const data = await apiFetch(`/search?${params}`)
-  const tracks = data.tracks?.items || []
-  return tracks
-    .filter((t) => t && (t.popularity ?? 0) <= maxPop)
-    .sort((a, b) => (a.popularity ?? 0) - (b.popularity ?? 0))
-    .slice(0, 40)
-    .map(normalizeTrack)
+  // For user searches, search their query directly + also try tag:hipster + their query
+  const [direct, hipster] = await Promise.allSettled([
+    fetchTracks(query, maxPop, 25),
+    fetchTracks(`tag:hipster ${query}`, maxPop, 15),
+  ])
+  const combined = [
+    ...(direct.status === 'fulfilled' ? direct.value : []),
+    ...(hipster.status === 'fulfilled' ? hipster.value : []),
+  ]
+  const seen = new Set()
+  return combined.filter(t => {
+    if (seen.has(t.id)) return false
+    seen.add(t.id)
+    return true
+  }).slice(0, 40)
 }
 
 export async function getCurrentUser() { return apiFetch('/me') }
@@ -73,27 +106,43 @@ export async function getCurrentUser() { return apiFetch('/me') }
 export async function createPlaylist(userId, tracks) {
   const playlist = await apiFetch(`/users/${userId}/playlists`, {
     method: 'POST',
-    body: JSON.stringify({ name: '🟢 Potsify — Undiscovered Tracks', description: 'The forgotten side of Spotify. Generated by Potsify.', public: true }),
+    body: JSON.stringify({
+      name: '🟢 Potsify — Undiscovered Tracks',
+      description: 'The forgotten side of Spotify. Generated by Potsify.',
+      public: true,
+    }),
   })
-  const uris = tracks.map((t) => `spotify:track:${t.id}`)
+  const uris = tracks.map(t => `spotify:track:${t.id}`)
   for (let i = 0; i < uris.length; i += 100) {
-    await apiFetch(`/playlists/${playlist.id}/tracks`, { method: 'POST', body: JSON.stringify({ uris: uris.slice(i, i + 100) }) })
+    await apiFetch(`/playlists/${playlist.id}/tracks`, {
+      method: 'POST',
+      body: JSON.stringify({ uris: uris.slice(i, i + 100) }),
+    })
   }
   return playlist
 }
 
 function normalizeTrack(t) {
   return {
-    id: t.id, name: t.name, artists: t.artists.map((a) => a.name),
-    album: t.album.name, albumArt: t.album.images?.[1]?.url || t.album.images?.[0]?.url || null,
-    popularity: t.popularity ?? 0, previewUrl: t.preview_url,
-    spotifyUrl: t.external_urls?.spotify, uri: t.uri, durationMs: t.duration_ms,
+    id: t.id,
+    name: t.name,
+    artists: t.artists.map(a => a.name),
+    album: t.album.name,
+    albumArt: t.album.images?.[1]?.url || t.album.images?.[0]?.url || null,
+    popularity: t.popularity ?? 0,
+    previewUrl: t.preview_url,
+    spotifyUrl: t.external_urls?.spotify,
+    uri: t.uri,
+    durationMs: t.duration_ms,
   }
 }
 
 function shuffleArray(arr) {
   const a = [...arr]
-  for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]] }
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[a[i], a[j]] = [a[j], a[i]]
+  }
   return a
 }
 
