@@ -231,3 +231,45 @@
   from { opacity: 0; transform: translateY(-4px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+.actionBtns {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+
+.randomBtn {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 12px;
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+  transition: all 0.15s;
+}
+
+.randomBtn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.randomBtn.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(90, 138, 24, 0.08);
+}
+
+.randomBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.refreshBtn.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(90, 138, 24, 0.08);
+}
