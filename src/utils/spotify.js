@@ -5,16 +5,12 @@ const BASE = 'https://api.spotify.com/v1'
 async function apiFetch(path, options = {}) {
   const token = await getValidToken()
   if (!token) throw new Error('Not authenticated')
-
-  // Only set Content-Type for POST/PUT requests — GET requests break with it
   const headers = { Authorization: `Bearer ${token}` }
   if (options.body) headers['Content-Type'] = 'application/json'
-
   const res = await fetch(`${BASE}${path}`, {
     ...options,
     headers: { ...headers, ...(options.headers || {}) },
   })
-
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
     throw new Error(err?.error?.message || `API error ${res.status}`)
@@ -41,15 +37,15 @@ const SEARCH_SEEDS = [
 
 async function fetchTracks(query, maxPop = MAX_POPULARITY, count = 15) {
   const offset = Math.floor(Math.random() * 700)
-  const params = new URLSearchParams({ q: query, type: 'track', limit: 50, offset })
-  const data = await apiFetch(`/search?${params}`)
+  // Build URL manually — URLSearchParams double-encodes colons (tag:hipster → tag%3Ahipster → tag%253Ahipster)
+  const url = `/search?q=${encodeURIComponent(query)}&type=track&limit=50&offset=${offset}`
+  const data = await apiFetch(url)
   const items = data.tracks?.items || []
 
   return items
     .filter(t => {
       if (!t || !t.id) return false
       const pop = t.popularity
-      // null/undefined = unscored = ultra-obscure, always include
       return pop === null || pop === undefined || pop <= maxPop
     })
     .sort((a, b) => (a.popularity ?? 0) - (b.popularity ?? 0))
