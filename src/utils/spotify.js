@@ -20,6 +20,9 @@ async function apiFetch(path, options = {}) {
 
 export const MAX_POPULARITY = 50
 
+// Single letters that reliably return broad results across all genres
+const RANDOM_SEEDS = ['a','e','i','o','u','the','love','you','my','in','on','it','is','be','to','so','go','do']
+
 const SEARCH_SEEDS = [
   { q: 'tag:hipster', label: 'hipster' },
   { q: 'genre:ambient', label: 'ambient' },
@@ -37,11 +40,9 @@ const SEARCH_SEEDS = [
 
 async function fetchTracks(query, maxPop = MAX_POPULARITY, count = 15) {
   const offset = Math.floor(Math.random() * 700)
-  // Build URL manually — URLSearchParams double-encodes colons (tag:hipster → tag%3Ahipster → tag%253Ahipster)
   const url = `/search?q=${encodeURIComponent(query)}&type=track&limit=50&offset=${offset}`
   const data = await apiFetch(url)
   const items = data.tracks?.items || []
-
   return items
     .filter(t => {
       if (!t || !t.id) return false
@@ -53,12 +54,30 @@ async function fetchTracks(query, maxPop = MAX_POPULARITY, count = 15) {
     .map(normalizeTrack)
 }
 
+// Random mode — no popularity filter, just grab whatever Spotify returns
+async function fetchRandomBatch(query, count = 15) {
+  const offset = Math.floor(Math.random() * 500)
+  const url = `/search?q=${encodeURIComponent(query)}&type=track&limit=50&offset=${offset}`
+  const data = await apiFetch(url)
+  const items = data.tracks?.items || []
+  return shuffleArray(items.filter(t => t && t.id)).slice(0, count).map(normalizeTrack)
+}
+
 export async function fetchDiscoveryFeed(maxPop = MAX_POPULARITY) {
   const seeds = shuffleArray(SEARCH_SEEDS).slice(0, 6)
   const results = await Promise.allSettled(seeds.map(s => fetchTracks(s.q, maxPop, 12)))
   const tracks = results.filter(r => r.status === 'fulfilled').flatMap(r => r.value)
   const seen = new Set()
   return tracks.filter(t => { if (seen.has(t.id)) return false; seen.add(t.id); return true })
+}
+
+// Random discovery — any song from any genre, no filters
+export async function fetchRandomFeed() {
+  const seeds = shuffleArray(RANDOM_SEEDS).slice(0, 6)
+  const results = await Promise.allSettled(seeds.map(q => fetchRandomBatch(q, 12)))
+  const tracks = results.filter(r => r.status === 'fulfilled').flatMap(r => r.value)
+  const seen = new Set()
+  return shuffleArray(tracks.filter(t => { if (seen.has(t.id)) return false; seen.add(t.id); return true }))
 }
 
 export async function fetchLowPopularityTracks(query, maxPop = MAX_POPULARITY, count = 15) {
@@ -123,4 +142,4 @@ function shuffleArray(arr) {
   return a
 }
 
-export { SEARCH_SEEDS }
+export { SEARCH_SEEDS, RANDOM_SEEDS }
