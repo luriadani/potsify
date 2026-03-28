@@ -5,10 +5,16 @@ const BASE = 'https://api.spotify.com/v1'
 async function apiFetch(path, options = {}) {
   const token = await getValidToken()
   if (!token) throw new Error('Not authenticated')
+
+  // Only set Content-Type for POST/PUT requests — GET requests break with it
+  const headers = { Authorization: `Bearer ${token}` }
+  if (options.body) headers['Content-Type'] = 'application/json'
+
   const res = await fetch(`${BASE}${path}`, {
     ...options,
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', ...(options.headers || {}) },
+    headers: { ...headers, ...(options.headers || {}) },
   })
+
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
     throw new Error(err?.error?.message || `API error ${res.status}`)
@@ -18,11 +24,6 @@ async function apiFetch(path, options = {}) {
 
 export const MAX_POPULARITY = 50
 
-// Mix of strategies that reliably return tracks across regions:
-// - tag:hipster: Spotify's own obscurity filter
-// - genre:X: broad genre pools
-// - single letters: returns deep catalog cuts
-// - tag:hipster + year combos: era-specific obscure tracks
 const SEARCH_SEEDS = [
   { q: 'tag:hipster', label: 'hipster' },
   { q: 'genre:ambient', label: 'ambient' },
@@ -38,10 +39,6 @@ const SEARCH_SEEDS = [
   { q: 'tag:hipster year:2010-2020', label: '10s hipster' },
 ]
 
-/**
- * Core fetch — gets tracks from a query and includes ALL of them
- * (null popularity = ultra-obscure, always included)
- */
 async function fetchTracks(query, maxPop = MAX_POPULARITY, count = 15) {
   const offset = Math.floor(Math.random() * 700)
   const params = new URLSearchParams({ q: query, type: 'track', limit: 50, offset })
@@ -51,9 +48,8 @@ async function fetchTracks(query, maxPop = MAX_POPULARITY, count = 15) {
   return items
     .filter(t => {
       if (!t || !t.id) return false
-      // null popularity means Spotify hasn't scored it = ultra-obscure, always include
-      // numeric popularity must be <= maxPop
       const pop = t.popularity
+      // null/undefined = unscored = ultra-obscure, always include
       return pop === null || pop === undefined || pop <= maxPop
     })
     .sort((a, b) => (a.popularity ?? 0) - (b.popularity ?? 0))
@@ -62,21 +58,11 @@ async function fetchTracks(query, maxPop = MAX_POPULARITY, count = 15) {
 }
 
 export async function fetchDiscoveryFeed(maxPop = MAX_POPULARITY) {
-  // Pick 6 random seeds, run them in parallel
   const seeds = shuffleArray(SEARCH_SEEDS).slice(0, 6)
   const results = await Promise.allSettled(seeds.map(s => fetchTracks(s.q, maxPop, 12)))
-
-  const tracks = results
-    .filter(r => r.status === 'fulfilled')
-    .flatMap(r => r.value)
-
-  // Deduplicate
+  const tracks = results.filter(r => r.status === 'fulfilled').flatMap(r => r.value)
   const seen = new Set()
-  return tracks.filter(t => {
-    if (seen.has(t.id)) return false
-    seen.add(t.id)
-    return true
-  })
+  return tracks.filter(t => { if (seen.has(t.id)) return false; seen.add(t.id); return true })
 }
 
 export async function fetchLowPopularityTracks(query, maxPop = MAX_POPULARITY, count = 15) {
@@ -84,7 +70,6 @@ export async function fetchLowPopularityTracks(query, maxPop = MAX_POPULARITY, c
 }
 
 export async function searchLowPopularityTracks(query, maxPop = MAX_POPULARITY) {
-  // For user searches, search their query directly + also try tag:hipster + their query
   const [direct, hipster] = await Promise.allSettled([
     fetchTracks(query, maxPop, 25),
     fetchTracks(`tag:hipster ${query}`, maxPop, 15),
@@ -94,11 +79,7 @@ export async function searchLowPopularityTracks(query, maxPop = MAX_POPULARITY) 
     ...(hipster.status === 'fulfilled' ? hipster.value : []),
   ]
   const seen = new Set()
-  return combined.filter(t => {
-    if (seen.has(t.id)) return false
-    seen.add(t.id)
-    return true
-  }).slice(0, 40)
+  return combined.filter(t => { if (seen.has(t.id)) return false; seen.add(t.id); return true }).slice(0, 40)
 }
 
 export async function getCurrentUser() { return apiFetch('/me') }
