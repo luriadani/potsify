@@ -10,15 +10,12 @@ export function Dashboard({ user, onLogout }) {
     tracks, loading, error,
     selected, maxPop, setMaxPop,
     playlistUrl, creatingPlaylist,
-    loadFeed, search,
+    loadFeed, loadRandom, search,
     toggleSelect, selectAll, clearSelection,
     savePlaylist,
   } = useTracks()
 
-  // Load on mount
-  useEffect(() => {
-    loadFeed()
-  }, [])
+  useEffect(() => { loadFeed() }, [])
 
   const handleSave = () => savePlaylist(user.id)
 
@@ -31,6 +28,7 @@ export function Dashboard({ user, onLogout }) {
         onMaxPopChange={setMaxPop}
         onSearch={search}
         onRefresh={() => loadFeed(maxPop)}
+        onRandom={loadRandom}
         onSelectAll={selectAll}
         onClearSelection={clearSelection}
         selectedCount={selected.size}
@@ -64,7 +62,7 @@ export function Dashboard({ user, onLogout }) {
         {!loading && tracks.length === 0 && !error && (
           <div className={styles.empty}>
             <p className={styles.emptyTitle}>No tracks found</p>
-            <p className={styles.emptyHint}>Try raising the max popularity score or a different search.</p>
+            <p className={styles.emptyHint}>Try the Random button for guaranteed results, or raise the max popularity score.</p>
           </div>
         )}
 
@@ -76,15 +74,9 @@ export function Dashboard({ user, onLogout }) {
                 Popularity ≤ {maxPop} · sorted by obscurity
               </span>
             </div>
-
             <div className={styles.grid}>
-              {tracks.map((track) => (
-                <TrackCard
-                  key={track.id}
-                  track={track}
-                  selected={selected.has(track.id)}
-                  onToggle={toggleSelect}
-                />
+              {tracks.map(track => (
+                <TrackCard key={track.id} track={track} selected={selected.has(track.id)} onToggle={toggleSelect} />
               ))}
             </div>
           </>
