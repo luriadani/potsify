@@ -24,7 +24,7 @@ async function generateCodeChallenge(verifier) {
 export async function initiateLogin() {
   const verifier = generateCodeVerifier()
   const challenge = await generateCodeChallenge(verifier)
-  sessionStorage.setItem('pkce_verifier', verifier)
+  localStorage.setItem('pkce_verifier', verifier)
 
   const params = new URLSearchParams({
     response_type: 'code',
@@ -39,7 +39,7 @@ export async function initiateLogin() {
 }
 
 export async function exchangeCode(code) {
-  const verifier = sessionStorage.getItem('pkce_verifier')
+  const verifier = localStorage.getItem('pkce_verifier')
   if (!verifier) throw new Error('No PKCE verifier found')
 
   const response = await fetch('https://accounts.spotify.com/api/token', {
@@ -62,7 +62,7 @@ export async function exchangeCode(code) {
   localStorage.setItem('spotify_refresh_token', data.refresh_token || '')
   localStorage.setItem('spotify_expires_at', String(expiresAt))
 
-  sessionStorage.removeItem('pkce_verifier')
+  localStorage.removeItem('pkce_verifier')
   return data.access_token
 }
 
